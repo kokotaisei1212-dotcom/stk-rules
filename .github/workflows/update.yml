@@ -1,0 +1,28 @@
+name: update
+# copies the published rules from stk-evidence.com each time the site is published (started by its publish script), and daily
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * *"
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: copy
+        run: |
+          set -euo pipefail
+          curl -sSf "https://api.stk-evidence.com/v1/rules?history=1" -o h.json
+          python3 -c "import json; d=json.load(open('h.json')); v=d['versions']; assert v and all(x.get('sig') for x in v); json.dump(v, open('data/versions.json','w'), ensure_ascii=False, indent=1); open('data/rules.txt','w').write(v[-1]['text'])"
+          rm h.json
+          curl -sSf https://stk-evidence.com/rules-data/actions.json -o data/actions.json
+          curl -sSf https://stk-evidence.com/rules-data/laws.json -o data/laws.json
+          python3 -c "import json; [json.load(open(f)) for f in ('data/actions.json','data/laws.json')]"
+      - name: commit
+        run: |
+          git config user.name "stk-rules"
+          git config user.email "stk-rules@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet || { git commit -m "The rules as published on $(date -u +%FT%TZ)"; git push; }
